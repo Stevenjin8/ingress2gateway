@@ -2,13 +2,17 @@
 
 approvers:
   - LiorLieberman
-  - mlavacca  
   - robscott
+  - Stevenjin8
   - youngnick
 
 reviewers:
+  - bexxmodd
   - LiorLieberman
   - rikatz
+  - spencerhance
+  - Stevenjin8
 emeritus_approvers:
   - bowei
   - shaneutt
+  - mlavacca

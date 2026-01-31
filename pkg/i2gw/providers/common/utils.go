@@ -28,8 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 )
 
 func GetIngressClass(ingress networkingv1.Ingress) string {
@@ -158,7 +156,13 @@ func groupIngressPathsByMatchKey(rules []ingressRule) orderedIngressPathsByMatch
 
 	for i, ir := range rules {
 		for j, path := range ir.rule.HTTP.Paths {
-			ip := ingressPath{ruleIdx: i, pathIdx: j, ruleType: "http", path: path}
+			ip := ingressPath{
+				ruleIdx:       i,
+				pathIdx:       j,
+				ruleType:      "http",
+				path:          path,
+				sourceIngress: ir.ingress,
+			}
 			pmKey := getPathMatchKey(ip)
 			if _, ok := ingressPathsByMatchKey.data[pmKey]; !ok {
 				ingressPathsByMatchKey.keys = append(ingressPathsByMatchKey.keys, pmKey)
@@ -184,51 +188,6 @@ func GroupServicePortsByPortName(services map[types.NamespacedName]*apiv1.Servic
 
 func PtrTo[T any](a T) *T {
 	return &a
-}
-
-type uniqueBackendRefsKey struct {
-	Name      gatewayv1.ObjectName
-	Namespace gatewayv1.Namespace
-	Port      gatewayv1.PortNumber
-	Group     gatewayv1.Group
-	Kind      gatewayv1.Kind
-}
-
-// removeBackendRefsDuplicates removes duplicate backendRefs from a list of backendRefs.
-func removeBackendRefsDuplicates(backendRefs []gatewayv1.HTTPBackendRef) []gatewayv1.HTTPBackendRef {
-	var uniqueBackendRefs []gatewayv1.HTTPBackendRef
-	uniqueKeys := map[uniqueBackendRefsKey]struct{}{}
-
-	for _, backendRef := range backendRefs {
-		var k uniqueBackendRefsKey
-
-		group := gatewayv1.Group("")
-		kind := gatewayv1.Kind("Service")
-
-		if backendRef.Group != nil && *backendRef.Group != "core" {
-			group = *backendRef.Group
-		}
-
-		if backendRef.Kind != nil {
-			kind = *backendRef.Kind
-		}
-
-		k.Name = backendRef.Name
-		k.Group = group
-		k.Kind = kind
-
-		if backendRef.Port != nil {
-			k.Port = *backendRef.Port
-		}
-
-		if _, exists := uniqueKeys[k]; exists {
-			continue
-		}
-
-		uniqueKeys[k] = struct{}{}
-		uniqueBackendRefs = append(uniqueBackendRefs, backendRef)
-	}
-	return uniqueBackendRefs
 }
 
 // ParseGRPCServiceMethod parses gRPC service and method from HTTP path
@@ -302,6 +261,10 @@ func ConvertHTTPFiltersToGRPCFilters(httpFilters []gatewayv1.HTTPRouteFilter) GR
 			unsupportedTypes = append(unsupportedTypes, httpFilter.Type)
 		case gatewayv1.HTTPRouteFilterExtensionRef:
 			unsupportedTypes = append(unsupportedTypes, httpFilter.Type)
+		case gatewayv1.HTTPRouteFilterCORS:
+			unsupportedTypes = append(unsupportedTypes, httpFilter.Type)
+		case gatewayv1.HTTPRouteFilterExternalAuth:
+			unsupportedTypes = append(unsupportedTypes, httpFilter.Type)
 		default:
 			unsupportedTypes = append(unsupportedTypes, httpFilter.Type)
 		}
@@ -350,30 +313,30 @@ func RemoveGRPCRulesFromHTTPRoute(httpRoute *gatewayv1.HTTPRoute, grpcServiceSet
 }
 
 // CreateBackendTLSPolicy creates a BackendTLSPolicy for the given service
-func CreateBackendTLSPolicy(namespace, policyName, serviceName string) gatewayv1alpha3.BackendTLSPolicy {
+func CreateBackendTLSPolicy(namespace, policyName, serviceName string) gatewayv1.BackendTLSPolicy {
 
 	// TODO: Migrate BackendTLSPolicy from gatewayv1alpha3 to gatewayv1 for Gateway API 1.4
 	// See: https://github.com/kubernetes-sigs/ingress2gateway/issues/236
-	return gatewayv1alpha3.BackendTLSPolicy{
+	return gatewayv1.BackendTLSPolicy{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gatewayv1alpha3.GroupVersion.String(),
+			APIVersion: gatewayv1.GroupVersion.String(),
 			Kind:       "BackendTLSPolicy",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      policyName,
 			Namespace: namespace,
 		},
-		Spec: gatewayv1alpha3.BackendTLSPolicySpec{
-			TargetRefs: []gatewayv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		Spec: gatewayv1.BackendTLSPolicySpec{
+			TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
 				{
-					LocalPolicyTargetReference: gatewayv1alpha2.LocalPolicyTargetReference{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
 						Group: "", // Core group
 						Kind:  "Service",
 						Name:  gatewayv1.ObjectName(serviceName),
 					},
 				},
 			},
-			Validation: gatewayv1alpha3.BackendTLSPolicyValidation{
+			Validation: gatewayv1.BackendTLSPolicyValidation{
 				// Note: WellKnownCACertificates and Hostname fields are intentionally left empty
 				// These fields must be manually configured based on your backend service's TLS setup
 			},

@@ -24,9 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 
-	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/intermediate"
+	providerir "github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/provider_intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/providers/common"
 )
 
@@ -69,8 +68,8 @@ func TestGRPCServicesRemoveHTTPRoute(t *testing.T) {
 	routeName := common.RouteName(ingress.Name, ingress.Spec.Rules[0].Host)
 	routeKey := types.NamespacedName{Namespace: ingress.Namespace, Name: routeName}
 
-	ir := intermediate.IR{
-		HTTPRoutes: map[types.NamespacedName]intermediate.HTTPRouteContext{
+	ir := providerir.ProviderIR{
+		HTTPRoutes: map[types.NamespacedName]providerir.HTTPRouteContext{
 			routeKey: {
 				HTTPRoute: gatewayv1.HTTPRoute{
 					ObjectMeta: metav1.ObjectMeta{
@@ -81,7 +80,7 @@ func TestGRPCServicesRemoveHTTPRoute(t *testing.T) {
 			},
 		},
 		GRPCRoutes:         make(map[types.NamespacedName]gatewayv1.GRPCRoute),
-		BackendTLSPolicies: make(map[types.NamespacedName]gatewayv1alpha3.BackendTLSPolicy),
+		BackendTLSPolicies: make(map[types.NamespacedName]gatewayv1.BackendTLSPolicy),
 	}
 
 	// Verify HTTPRoute exists before
@@ -256,8 +255,8 @@ func TestGRPCServicesWithMixedServices(t *testing.T) {
 		},
 	}
 
-	ir := intermediate.IR{
-		HTTPRoutes: map[types.NamespacedName]intermediate.HTTPRouteContext{
+	ir := providerir.ProviderIR{
+		HTTPRoutes: map[types.NamespacedName]providerir.HTTPRouteContext{
 			routeKey: {
 				HTTPRoute: gatewayv1.HTTPRoute{
 					ObjectMeta: metav1.ObjectMeta{

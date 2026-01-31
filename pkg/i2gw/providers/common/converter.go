@@ -23,21 +23,21 @@ import (
 	"strings"
 
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw"
-	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/intermediate"
+	providerir "github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/provider_intermediate"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/ptr"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-// ToIR converts the received ingresses to intermediate.IR without taking into
+// ToIR converts the received ingresses to providerir.ProviderIR without taking into
 // consideration any provider specific logic.
-func ToIR(ingresses []networkingv1.Ingress, servicePorts map[types.NamespacedName]map[string]int32, options i2gw.ProviderImplementationSpecificOptions) (intermediate.IR, field.ErrorList) {
+func ToIR(ingresses []networkingv1.Ingress, servicePorts map[types.NamespacedName]map[string]int32, options i2gw.ProviderImplementationSpecificOptions) (providerir.ProviderIR, field.ErrorList) {
 	aggregator := ingressAggregator{
 		ruleGroups:   map[ruleGroupKey]*ingressRuleGroup{},
 		servicePorts: servicePorts,
@@ -48,36 +48,39 @@ func ToIR(ingresses []networkingv1.Ingress, servicePorts map[types.NamespacedNam
 		aggregator.addIngress(ingress)
 	}
 	if len(errs) > 0 {
-		return intermediate.IR{}, errs
+		return providerir.ProviderIR{}, errs
 	}
 
 	routes, gateways, errs := aggregator.toHTTPRoutesAndGateways(options)
 	if len(errs) > 0 {
-		return intermediate.IR{}, errs
+		return providerir.ProviderIR{}, errs
 	}
 
-	routeByKey := make(map[types.NamespacedName]intermediate.HTTPRouteContext)
-	for _, route := range routes {
-		key := types.NamespacedName{Namespace: route.Namespace, Name: route.Name}
-		routeByKey[key] = intermediate.HTTPRouteContext{HTTPRoute: route}
+	routeByKey := make(map[types.NamespacedName]providerir.HTTPRouteContext)
+	for _, routeWithSources := range routes {
+		key := types.NamespacedName{Namespace: routeWithSources.route.Namespace, Name: routeWithSources.route.Name}
+		routeByKey[key] = providerir.HTTPRouteContext{
+			HTTPRoute:          routeWithSources.route,
+			RuleBackendSources: routeWithSources.sources,
+		}
 	}
 
-	gatewayByKey := make(map[types.NamespacedName]intermediate.GatewayContext)
+	gatewayByKey := make(map[types.NamespacedName]providerir.GatewayContext)
 	for _, gateway := range gateways {
 		key := types.NamespacedName{Namespace: gateway.Namespace, Name: gateway.Name}
-		gatewayByKey[key] = intermediate.GatewayContext{Gateway: gateway}
+		gatewayByKey[key] = providerir.GatewayContext{Gateway: gateway}
 	}
 
-	return intermediate.IR{
+	return providerir.ProviderIR{
 		Gateways:           gatewayByKey,
 		HTTPRoutes:         routeByKey,
-		Services:           make(map[types.NamespacedName]intermediate.ProviderSpecificServiceIR),
+		Services:           make(map[types.NamespacedName]providerir.ProviderSpecificServiceIR),
 		GatewayClasses:     make(map[types.NamespacedName]gatewayv1.GatewayClass),
 		TLSRoutes:          make(map[types.NamespacedName]gatewayv1alpha2.TLSRoute),
 		TCPRoutes:          make(map[types.NamespacedName]gatewayv1alpha2.TCPRoute),
 		UDPRoutes:          make(map[types.NamespacedName]gatewayv1alpha2.UDPRoute),
 		GRPCRoutes:         make(map[types.NamespacedName]gatewayv1.GRPCRoute),
-		BackendTLSPolicies: make(map[types.NamespacedName]gatewayv1alpha3.BackendTLSPolicy),
+		BackendTLSPolicies: make(map[types.NamespacedName]gatewayv1.BackendTLSPolicy),
 		ReferenceGrants:    make(map[types.NamespacedName]gatewayv1beta1.ReferenceGrant),
 	}, nil
 }
@@ -134,58 +137,73 @@ type ingressRuleGroup struct {
 }
 
 type ingressRule struct {
+	// Source tracking
+	ingress *networkingv1.Ingress
+
 	rule networkingv1.IngressRule
 }
 
 type ingressDefaultBackend struct {
-	name         string
-	namespace    string
-	ingressClass string
-	backend      networkingv1.IngressBackend
+	name          string
+	namespace     string
+	ingressClass  string
+	backend       networkingv1.IngressBackend
+	sourceIngress *networkingv1.Ingress
 }
 
 type ingressPath struct {
-	ruleIdx  int
-	pathIdx  int
-	ruleType string
-	path     networkingv1.HTTPIngressPath
+	// These are for source error propagation
+	ruleIdx       int
+	pathIdx       int
+	ruleType      string
+	path          networkingv1.HTTPIngressPath
+	sourceIngress *networkingv1.Ingress
 }
 
 func (a *ingressAggregator) addIngress(ingress networkingv1.Ingress) {
 	ingressClass := GetIngressClass(ingress)
 	for _, rule := range ingress.Spec.Rules {
-		a.addIngressRule(ingress.Namespace, ingress.Name, ingressClass, rule, ingress.Spec)
+		a.addIngressRule(ingress, ingressClass, rule)
 	}
 	if ingress.Spec.DefaultBackend != nil {
 		a.defaultBackends = append(a.defaultBackends, ingressDefaultBackend{
-			name:         ingress.Name,
-			namespace:    ingress.Namespace,
-			ingressClass: ingressClass,
-			backend:      *ingress.Spec.DefaultBackend,
+			name:          ingress.Name,
+			namespace:     ingress.Namespace,
+			ingressClass:  ingressClass,
+			backend:       *ingress.Spec.DefaultBackend,
+			sourceIngress: &ingress,
 		})
 	}
 }
 
-func (a *ingressAggregator) addIngressRule(namespace, name, ingressClass string, rule networkingv1.IngressRule, iSpec networkingv1.IngressSpec) {
-	rgKey := ruleGroupKey(fmt.Sprintf("%s/%s/%s", namespace, ingressClass, rule.Host))
+func (a *ingressAggregator) addIngressRule(ingress networkingv1.Ingress, ingressClass string, rule networkingv1.IngressRule) {
+	rgKey := ruleGroupKey(fmt.Sprintf("%s/%s/%s", ingress.Namespace, ingressClass, rule.Host))
 	rg, ok := a.ruleGroups[rgKey]
 	if !ok {
 		rg = &ingressRuleGroup{
-			namespace:    namespace,
-			name:         name,
+			namespace:    ingress.Namespace,
+			name:         ingress.Name,
 			ingressClass: ingressClass,
 			host:         rule.Host,
 		}
 		a.ruleGroups[rgKey] = rg
 	}
-	if len(iSpec.TLS) > 0 {
-		rg.tls = append(rg.tls, iSpec.TLS...)
+	if len(ingress.Spec.TLS) > 0 {
+		rg.tls = append(rg.tls, ingress.Spec.TLS...)
 	}
-	rg.rules = append(rg.rules, ingressRule{rule: rule})
+	rg.rules = append(rg.rules, ingressRule{
+		ingress: &ingress,
+		rule:    rule,
+	})
 }
 
-func (a *ingressAggregator) toHTTPRoutesAndGateways(options i2gw.ProviderImplementationSpecificOptions) ([]gatewayv1.HTTPRoute, []gatewayv1.Gateway, field.ErrorList) {
-	var httpRoutes []gatewayv1.HTTPRoute
+type httpRouteWithSources struct {
+	route   gatewayv1.HTTPRoute
+	sources [][]providerir.BackendSource
+}
+
+func (a *ingressAggregator) toHTTPRoutesAndGateways(options i2gw.ProviderImplementationSpecificOptions) ([]httpRouteWithSources, []gatewayv1.Gateway, field.ErrorList) {
+	var httpRoutes []httpRouteWithSources
 	var errors field.ErrorList
 	listenersByNamespacedGateway := map[string][]gatewayv1.Listener{}
 
@@ -208,16 +226,20 @@ func (a *ingressAggregator) toHTTPRoutesAndGateways(options i2gw.ProviderImpleme
 			listener.Hostname = (*gatewayv1.Hostname)(&rg.tls[0].Hosts[0])
 		}
 		if len(rg.tls) > 0 {
-			listener.TLS = &gatewayv1.GatewayTLSConfig{}
+			listener.TLS = &gatewayv1.ListenerTLSConfig{}
 		}
 		for _, tls := range rg.tls {
 			listener.TLS.CertificateRefs = append(listener.TLS.CertificateRefs,
-				gatewayv1.SecretObjectReference{Name: gatewayv1.ObjectName(tls.SecretName)})
+				gatewayv1.SecretObjectReference{
+					Group: ptr.To(gatewayv1.Group("")),
+					Kind:  ptr.To(gatewayv1.Kind("Secret")),
+					Name:  gatewayv1.ObjectName(tls.SecretName),
+				})
 		}
 		gwKey := fmt.Sprintf("%s/%s", rg.namespace, rg.ingressClass)
 		listenersByNamespacedGateway[gwKey] = append(listenersByNamespacedGateway[gwKey], listener)
-		httpRoute, errs := rg.toHTTPRoute(a.servicePorts, options)
-		httpRoutes = append(httpRoutes, httpRoute)
+		httpRoute, sources, errs := rg.toHTTPRoute(a.servicePorts, options)
+		httpRoutes = append(httpRoutes, httpRouteWithSources{route: httpRoute, sources: sources})
 		errors = append(errors, errs...)
 	}
 
@@ -242,6 +264,7 @@ func (a *ingressAggregator) toHTTPRoutesAndGateways(options i2gw.ProviderImpleme
 		}
 		httpRoute.SetGroupVersionKind(HTTPRouteGVK)
 
+		// We create an HTTPRoute with a single rule and a single backend.
 		backendRef, err := ToBackendRef(db.namespace, db.backend, a.servicePorts, field.NewPath(db.name, "paths", "backends").Index(i))
 		if err != nil {
 			errors = append(errors, err)
@@ -250,8 +273,16 @@ func (a *ingressAggregator) toHTTPRoutesAndGateways(options i2gw.ProviderImpleme
 				BackendRefs: []gatewayv1.HTTPBackendRef{{BackendRef: *backendRef}},
 			})
 		}
-
-		httpRoutes = append(httpRoutes, httpRoute)
+		// Set the single source for this default backend.
+		sources := [][]providerir.BackendSource{
+			{
+				{
+					Ingress:        db.sourceIngress,
+					DefaultBackend: &db.backend,
+				},
+			},
+		}
+		httpRoutes = append(httpRoutes, httpRouteWithSources{route: httpRoute, sources: sources})
 	}
 
 	gatewaysByKey := map[string]*gatewayv1.Gateway{}
@@ -307,7 +338,7 @@ func (a *ingressAggregator) toHTTPRoutesAndGateways(options i2gw.ProviderImpleme
 	return httpRoutes, gateways, errors
 }
 
-func (rg *ingressRuleGroup) toHTTPRoute(servicePorts map[types.NamespacedName]map[string]int32, options i2gw.ProviderImplementationSpecificOptions) (gatewayv1.HTTPRoute, field.ErrorList) {
+func (rg *ingressRuleGroup) toHTTPRoute(servicePorts map[types.NamespacedName]map[string]int32, options i2gw.ProviderImplementationSpecificOptions) (gatewayv1.HTTPRoute, [][]providerir.BackendSource, field.ErrorList) {
 	ingressPathsByMatchKey := groupIngressPathsByMatchKey(rg.rules)
 	httpRoute := gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
@@ -331,6 +362,8 @@ func (rg *ingressRuleGroup) toHTTPRoute(servicePorts map[types.NamespacedName]ma
 	}
 
 	var errors field.ErrorList
+	var allRuleBackendSources [][]providerir.BackendSource
+
 	for _, key := range ingressPathsByMatchKey.keys {
 		paths := ingressPathsByMatchKey.data[key]
 		path := paths[0]
@@ -344,19 +377,25 @@ func (rg *ingressRuleGroup) toHTTPRoute(servicePorts map[types.NamespacedName]ma
 			Matches: []gatewayv1.HTTPRouteMatch{*match},
 		}
 
-		backendRefs, errs := rg.configureBackendRef(servicePorts, paths)
+		backendRefs, sources, errs := rg.configureBackendRef(servicePorts, paths)
 		errors = append(errors, errs...)
 		hrRule.BackendRefs = backendRefs
 
 		httpRoute.Spec.Rules = append(httpRoute.Spec.Rules, hrRule)
+		allRuleBackendSources = append(allRuleBackendSources, sources)
 	}
 
-	return httpRoute, errors
+	for idx := range httpRoute.Spec.Rules {
+		httpRoute.Spec.Rules[idx].Name = ptr.To(gatewayv1.SectionName(fmt.Sprintf("rule-%d", idx)))
+	}
+
+	return httpRoute, allRuleBackendSources, errors
 }
 
-func (rg *ingressRuleGroup) configureBackendRef(servicePorts map[types.NamespacedName]map[string]int32, paths []ingressPath) ([]gatewayv1.HTTPBackendRef, field.ErrorList) {
+func (rg *ingressRuleGroup) configureBackendRef(servicePorts map[types.NamespacedName]map[string]int32, paths []ingressPath) ([]gatewayv1.HTTPBackendRef, []providerir.BackendSource, field.ErrorList) {
 	var errors field.ErrorList
 	var backendRefs []gatewayv1.HTTPBackendRef
+	var sources []providerir.BackendSource
 
 	for i, path := range paths {
 		backendRef, err := ToBackendRef(rg.namespace, path.path.Backend, servicePorts, field.NewPath("paths", "backends").Index(i))
@@ -365,9 +404,16 @@ func (rg *ingressRuleGroup) configureBackendRef(servicePorts map[types.Namespace
 			continue
 		}
 		backendRefs = append(backendRefs, gatewayv1.HTTPBackendRef{BackendRef: *backendRef})
+
+		// Track source for this backend
+		sources = append(sources, providerir.BackendSource{
+			Ingress: path.sourceIngress,
+			Path:    &path.path,
+		})
 	}
 
-	return removeBackendRefsDuplicates(backendRefs), errors
+	// keep duplicates as they might have different sources.
+	return backendRefs, sources, errors
 }
 
 func getPathMatchKey(ip ingressPath) pathMatchKey {

@@ -19,7 +19,7 @@ package gce
 import (
 	"fmt"
 
-	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/intermediate"
+	providerir "github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/provider_intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/providers/common"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,12 +28,12 @@ import (
 )
 
 // setGCEGatewayClasses updates the list of Gateways to use GCE GatewayClass.
-func setGCEGatewayClasses(ingresses []networkingv1.Ingress, gatewayContexts map[types.NamespacedName]intermediate.GatewayContext) field.ErrorList {
+func setGCEGatewayClasses(ingresses []networkingv1.Ingress, gatewayContexts map[types.NamespacedName]providerir.GatewayContext) field.ErrorList {
 	var errs field.ErrorList
 
 	// Since we already validated ingress resources when reading, there are
 	// only two cases here:
-	//   1. `kubernetes.io/ingress.class` exists in ingress anntation. In this
+	//   1. `kubernetes.io/ingress.class` exists in ingress annotation. In this
 	//      case, we use it to map to the corresponding gateway class.
 	//   2. Annotation does not exist. In this case, the ingress is defaulted
 	//      to use the GCE external ingress implementation, and should be
@@ -46,7 +46,7 @@ func setGCEGatewayClasses(ingresses []networkingv1.Ingress, gatewayContexts map[
 		if err != nil {
 			errs = append(errs, err)
 		}
-		gatewayContexts[gwKey] = intermediate.GatewayContext{Gateway: newGateway}
+		gatewayContexts[gwKey] = providerir.GatewayContext{Gateway: newGateway}
 	}
 	if len(errs) > 0 {
 		return errs

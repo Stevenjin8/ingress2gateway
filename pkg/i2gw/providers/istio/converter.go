@@ -23,8 +23,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/notifications"
+	providerir "github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/provider_intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/providers/common"
 	istiov1beta1 "istio.io/api/networking/v1beta1"
 	istioclientv1beta1 "istio.io/client-go/pkg/apis/networking/v1beta1"
@@ -57,12 +57,12 @@ func newResourcesToIRConverter() resourcesToIRConverter {
 	}
 }
 
-func (c *resourcesToIRConverter) convertToIR(storage *storage) (intermediate.IR, field.ErrorList) {
+func (c *resourcesToIRConverter) convertToIR(storage *storage) (providerir.ProviderIR, field.ErrorList) {
 	var errList field.ErrorList
 
-	gatewayResources := intermediate.IR{
-		Gateways:        make(map[types.NamespacedName]intermediate.GatewayContext),
-		HTTPRoutes:      make(map[types.NamespacedName]intermediate.HTTPRouteContext),
+	gatewayResources := providerir.ProviderIR{
+		Gateways:        make(map[types.NamespacedName]providerir.GatewayContext),
+		HTTPRoutes:      make(map[types.NamespacedName]providerir.HTTPRouteContext),
 		TLSRoutes:       make(map[types.NamespacedName]gatewayv1alpha2.TLSRoute),
 		TCPRoutes:       make(map[types.NamespacedName]gatewayv1alpha2.TCPRoute),
 		ReferenceGrants: make(map[types.NamespacedName]gatewayv1beta1.ReferenceGrant),
@@ -80,7 +80,7 @@ func (c *resourcesToIRConverter) convertToIR(storage *storage) (intermediate.IR,
 		gatewayResources.Gateways[types.NamespacedName{
 			Namespace: gw.Namespace,
 			Name:      gw.Name,
-		}] = intermediate.GatewayContext{Gateway: *gw}
+		}] = providerir.GatewayContext{Gateway: *gw}
 	}
 
 	for _, vs := range storage.VirtualServices {
@@ -104,7 +104,7 @@ func (c *resourcesToIRConverter) convertToIR(storage *storage) (intermediate.IR,
 				gatewayResources.HTTPRoutes[types.NamespacedName{
 					Namespace: httpRoute.Namespace,
 					Name:      httpRoute.Name,
-				}] = intermediate.HTTPRouteContext{HTTPRoute: *httpRoute}
+				}] = providerir.HTTPRouteContext{HTTPRoute: *httpRoute}
 			}
 		}
 
@@ -257,7 +257,7 @@ func (c *resourcesToIRConverter) convertGateway(gw *istioclientv1beta1.Gateway, 
 				Protocol: protocol,
 			}
 			if tlsMode != "" {
-				gwListener.TLS = &gatewayv1.GatewayTLSConfig{
+				gwListener.TLS = &gatewayv1.ListenerTLSConfig{
 					Mode: &tlsMode,
 				}
 			}
@@ -987,7 +987,7 @@ func (c *resourcesToIRConverter) convertVsTCPRoutes(virtualService metav1.Object
 }
 
 func (c *resourcesToIRConverter) isVirtualServiceAllowedForGateway(gateway types.NamespacedName, vs *istioclientv1beta1.VirtualService, fieldPath *field.Path) bool {
-	// by default, if ExportTo is empty it allowes export of the VirtualService to all namespaces
+	// by default, if ExportTo is empty it allows export of the VirtualService to all namespaces
 	vsAllowedNamespaces := sets.New("*")
 	if len(vs.Spec.GetExportTo()) > 0 {
 		vsAllowedNamespaces = sets.New(vs.Spec.GetExportTo()...)
@@ -1010,7 +1010,7 @@ func (c *resourcesToIRConverter) isVirtualServiceAllowedForGateway(gateway types
 	for _, host := range vs.Spec.GetHosts() {
 		hosts, ok := allowedHosts[vs.Namespace]
 		if ok && matchAny(hosts.UnsortedList(), host) {
-			notify(notifications.InfoNotification, fmt.Sprintf("host for gateway \"%v\" matched from same namespace as VirtualService \"%v\", namesapce: %v", gateway, vs.Name, vs.Namespace), vs)
+			notify(notifications.InfoNotification, fmt.Sprintf("host for gateway \"%v\" matched from same namespace as VirtualService \"%v\", namespace: %v", gateway, vs.Name, vs.Namespace), vs)
 			return true
 		}
 
@@ -1056,7 +1056,7 @@ func (c *resourcesToIRConverter) generateReferences(vs *istioclientv1beta1.Virtu
 		}
 
 		if !ok {
-			notify(notifications.InfoNotification, fmt.Sprintf("namespace of \"%v\" gateway taken from namesapce of VirtualService", gwName), vs)
+			notify(notifications.InfoNotification, fmt.Sprintf("namespace of \"%v\" gateway taken from namespace of VirtualService", gwName), vs)
 		}
 
 		g := gatewayv1.Group(common.GatewayGVK.Group)

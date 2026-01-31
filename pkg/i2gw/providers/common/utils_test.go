@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 )
 
 func TestGroupIngressPathsByMatchKey(t *testing.T) {
@@ -48,7 +47,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 			name: "1 rule with 1 match",
 			rules: []ingressRule{
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -101,7 +100,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 			name: "1 rule, multiple matches, different path",
 			rules: []ingressRule{
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -186,7 +185,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 			name: "multiple rules with single matches, same path",
 			rules: []ingressRule{
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -208,7 +207,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 					},
 				},
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -278,7 +277,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 			name: "multiple rules with single matches, different path",
 			rules: []ingressRule{
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -300,7 +299,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 					},
 				},
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -373,7 +372,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 			name: "multiple rules with multiple matches, mixed paths",
 			rules: []ingressRule{
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -407,7 +406,7 @@ func TestGroupIngressPathsByMatchKey(t *testing.T) {
 					},
 				},
 				{
-					networkingv1.IngressRule{
+					rule: networkingv1.IngressRule{
 						IngressRuleValue: networkingv1.IngressRuleValue{
 							HTTP: &networkingv1.HTTPIngressRuleValue{
 								Paths: []networkingv1.HTTPIngressPath{
@@ -912,7 +911,7 @@ func TestCreateBackendTLSPolicy(t *testing.T) {
 			require.Equal(t, tc.policyName, policy.Name)
 			require.Equal(t, tc.namespace, policy.Namespace)
 			require.Equal(t, "BackendTLSPolicy", policy.Kind)
-			require.Equal(t, gatewayv1alpha3.GroupVersion.String(), policy.APIVersion)
+			require.Equal(t, gatewayv1.GroupVersion.String(), policy.APIVersion)
 
 			require.Len(t, policy.Spec.TargetRefs, 1)
 			require.Equal(t, gatewayv1.ObjectName(tc.serviceName), policy.Spec.TargetRefs[0].Name)

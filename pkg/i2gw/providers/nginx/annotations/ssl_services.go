@@ -22,15 +22,15 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	gatewayv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/notifications"
+	providerir "github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/provider_intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/providers/common"
 )
 
 // SSLServicesFeature processes nginx.org/ssl-services annotation
-func SSLServicesFeature(ingresses []networkingv1.Ingress, _ map[types.NamespacedName]map[string]int32, ir *intermediate.IR) field.ErrorList {
+func SSLServicesFeature(ingresses []networkingv1.Ingress, _ map[types.NamespacedName]map[string]int32, ir *providerir.ProviderIR) field.ErrorList {
 	var errs field.ErrorList
 
 	for _, ingress := range ingresses {
@@ -45,7 +45,7 @@ func SSLServicesFeature(ingresses []networkingv1.Ingress, _ map[types.Namespaced
 // processSSLServicesAnnotation configures HTTPS backend protocol using BackendTLSPolicy
 //
 //nolint:unparam // ErrorList return type maintained for consistency
-func processSSLServicesAnnotation(ingress networkingv1.Ingress, sslServices string, ir *intermediate.IR) field.ErrorList {
+func processSSLServicesAnnotation(ingress networkingv1.Ingress, sslServices string, ir *providerir.ProviderIR) field.ErrorList {
 	var errs field.ErrorList //nolint:unparam // ErrorList return type maintained for consistency
 
 	services := splitAndTrimCommaList(sslServices)
@@ -55,7 +55,7 @@ func processSSLServicesAnnotation(ingress networkingv1.Ingress, sslServices stri
 	}
 
 	if ir.BackendTLSPolicies == nil {
-		ir.BackendTLSPolicies = make(map[types.NamespacedName]gatewayv1alpha3.BackendTLSPolicy)
+		ir.BackendTLSPolicies = make(map[types.NamespacedName]gatewayv1.BackendTLSPolicy)
 	}
 	for serviceName := range sslServiceSet {
 		policyName := BackendTLSPolicyName(ingress.Name, serviceName)

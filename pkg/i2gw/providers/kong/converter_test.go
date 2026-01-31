@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw"
-	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/intermediate"
+	providerir "github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/provider_intermediate"
 	"github.com/kubernetes-sigs/ingress2gateway/pkg/i2gw/providers/common"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -41,7 +41,7 @@ func Test_ToGateway(t *testing.T) {
 	testCases := []struct {
 		name           string
 		ingresses      map[types.NamespacedName]*networkingv1.Ingress
-		expectedIR     intermediate.IR
+		expectedIR     providerir.ProviderIR
 		expectedErrors field.ErrorList
 	}{
 		{
@@ -81,8 +81,8 @@ func Test_ToGateway(t *testing.T) {
 					},
 				},
 			},
-			expectedIR: intermediate.IR{
-				Gateways: map[types.NamespacedName]intermediate.GatewayContext{
+			expectedIR: providerir.ProviderIR{
+				Gateways: map[types.NamespacedName]providerir.GatewayContext{
 					{Namespace: "default", Name: "ingress-kong"}: {
 						Gateway: gatewayv1.Gateway{
 							ObjectMeta: metav1.ObjectMeta{Name: "ingress-kong", Namespace: "default"},
@@ -98,7 +98,7 @@ func Test_ToGateway(t *testing.T) {
 						},
 					},
 				},
-				HTTPRoutes: map[types.NamespacedName]intermediate.HTTPRouteContext{
+				HTTPRoutes: map[types.NamespacedName]providerir.HTTPRouteContext{
 					{Namespace: "default", Name: "multiple-matching-single-rule-test-mydomain-com"}: {
 						HTTPRoute: gatewayv1.HTTPRoute{
 							ObjectMeta: metav1.ObjectMeta{Name: "multiple-matching-single-rule-test-mydomain-com", Namespace: "default"},
@@ -110,6 +110,7 @@ func Test_ToGateway(t *testing.T) {
 								},
 								Hostnames: []gatewayv1.Hostname{"test.mydomain.com"},
 								Rules: []gatewayv1.HTTPRouteRule{{
+									Name: ptrTo(gatewayv1.SectionName("rule-0")),
 									Matches: []gatewayv1.HTTPRouteMatch{
 										{
 											Path: &gatewayv1.HTTPPathMatch{
@@ -216,8 +217,8 @@ func Test_ToGateway(t *testing.T) {
 					},
 				},
 			},
-			expectedIR: intermediate.IR{
-				Gateways: map[types.NamespacedName]intermediate.GatewayContext{
+			expectedIR: providerir.ProviderIR{
+				Gateways: map[types.NamespacedName]providerir.GatewayContext{
 					{Namespace: "default", Name: "ingress-kong"}: {
 						Gateway: gatewayv1.Gateway{
 							ObjectMeta: metav1.ObjectMeta{Name: "ingress-kong", Namespace: "default"},
@@ -233,7 +234,7 @@ func Test_ToGateway(t *testing.T) {
 						},
 					},
 				},
-				HTTPRoutes: map[types.NamespacedName]intermediate.HTTPRouteContext{
+				HTTPRoutes: map[types.NamespacedName]providerir.HTTPRouteContext{
 					{Namespace: "default", Name: "multiple-matching-multiple-rules-test-mydomain-com"}: {
 						HTTPRoute: gatewayv1.HTTPRoute{
 							ObjectMeta: metav1.ObjectMeta{Name: "multiple-matching-multiple-rules-test-mydomain-com", Namespace: "default"},
@@ -246,6 +247,7 @@ func Test_ToGateway(t *testing.T) {
 								Hostnames: []gatewayv1.Hostname{"test.mydomain.com"},
 								Rules: []gatewayv1.HTTPRouteRule{
 									{
+										Name: ptrTo(gatewayv1.SectionName("rule-0")),
 										Matches: []gatewayv1.HTTPRouteMatch{
 											{
 												Path: &gatewayv1.HTTPPathMatch{
@@ -286,6 +288,7 @@ func Test_ToGateway(t *testing.T) {
 										},
 									},
 									{
+										Name: ptrTo(gatewayv1.SectionName("rule-1")),
 										Matches: []gatewayv1.HTTPRouteMatch{
 											{
 												Path: &gatewayv1.HTTPPathMatch{
@@ -365,8 +368,8 @@ func Test_ToGateway(t *testing.T) {
 					},
 				},
 			},
-			expectedIR: intermediate.IR{
-				Gateways: map[types.NamespacedName]intermediate.GatewayContext{
+			expectedIR: providerir.ProviderIR{
+				Gateways: map[types.NamespacedName]providerir.GatewayContext{
 					{Namespace: "default", Name: "ingress-kong"}: {
 						Gateway: gatewayv1.Gateway{
 							ObjectMeta: metav1.ObjectMeta{Name: "ingress-kong", Namespace: "default"},
@@ -382,7 +385,7 @@ func Test_ToGateway(t *testing.T) {
 						},
 					},
 				},
-				HTTPRoutes: map[types.NamespacedName]intermediate.HTTPRouteContext{
+				HTTPRoutes: map[types.NamespacedName]providerir.HTTPRouteContext{
 					{Namespace: "default", Name: "implementation-specific-regex-test-mydomain-com"}: {
 						HTTPRoute: gatewayv1.HTTPRoute{
 							ObjectMeta: metav1.ObjectMeta{Name: "implementation-specific-regex-test-mydomain-com", Namespace: "default"},
@@ -395,6 +398,7 @@ func Test_ToGateway(t *testing.T) {
 								Hostnames: []gatewayv1.Hostname{"test.mydomain.com"},
 								Rules: []gatewayv1.HTTPRouteRule{
 									{
+										Name: ptrTo(gatewayv1.SectionName("rule-0")),
 										Matches: []gatewayv1.HTTPRouteMatch{
 											{
 												Path: &gatewayv1.HTTPPathMatch{
@@ -454,8 +458,8 @@ func Test_ToGateway(t *testing.T) {
 					},
 				},
 			},
-			expectedIR: intermediate.IR{
-				Gateways: map[types.NamespacedName]intermediate.GatewayContext{
+			expectedIR: providerir.ProviderIR{
+				Gateways: map[types.NamespacedName]providerir.GatewayContext{
 					{Namespace: "default", Name: "ingress-kong"}: {
 						Gateway: gatewayv1.Gateway{
 							ObjectMeta: metav1.ObjectMeta{Name: "ingress-kong", Namespace: "default"},
@@ -471,7 +475,7 @@ func Test_ToGateway(t *testing.T) {
 						},
 					},
 				},
-				HTTPRoutes: map[types.NamespacedName]intermediate.HTTPRouteContext{
+				HTTPRoutes: map[types.NamespacedName]providerir.HTTPRouteContext{
 					{Namespace: "default", Name: "implementation-specific-no-regex-test-mydomain-com"}: {
 						HTTPRoute: gatewayv1.HTTPRoute{
 							ObjectMeta: metav1.ObjectMeta{Name: "implementation-specific-no-regex-test-mydomain-com", Namespace: "default"},
@@ -484,6 +488,7 @@ func Test_ToGateway(t *testing.T) {
 								Hostnames: []gatewayv1.Hostname{"test.mydomain.com"},
 								Rules: []gatewayv1.HTTPRouteRule{
 									{
+										Name: ptrTo(gatewayv1.SectionName("rule-0")),
 										Matches: []gatewayv1.HTTPRouteMatch{
 											{
 												Path: &gatewayv1.HTTPPathMatch{
