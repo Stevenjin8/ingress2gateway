@@ -106,4 +106,13 @@ var parsedAnnotations = map[string]struct{}{
 	CorsAllowCredentialsAnnotation:  {},
 	CorsExposeHeadersAnnotation:     {},
 	CorsMaxAgeAnnotation:            {},
+	BackendProtocolAnnotation:       {},
+	ProxySSLVerifyAnnotation:        {},
+	ProxySSLSecretAnnotation:        {},
+	ProxySSLNameAnnotation:          {},
+	ProxySSLServerNameAnnotation:    {},
+	ProxySSLVerifyDepthAnnotation:   {},
+	ProxySSLProtocolsAnnotation:     {},
+	WhiteListSourceRangeAnnotation:  {},
+	DenyListSourceRangeAnnotation:   {},
 }
