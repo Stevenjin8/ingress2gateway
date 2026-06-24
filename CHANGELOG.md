@@ -16,6 +16,15 @@
 - [v0.1.0](#v010)
 - [v0.1.0-rc1](#v010-rc1)
 
+## v1.1.1
+
+## Changes by Kind
+
+### Bugfix
+
+- Fixed warning with regex rewrites (#412, @Stevenjin8)
+- Docs: Report.Notifications() accessor grouped by source (#410, @marshallford)
+
 ## v1.1.0
 
 ## Changes by Kind
