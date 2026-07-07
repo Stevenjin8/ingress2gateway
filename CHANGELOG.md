@@ -23,7 +23,7 @@
 
 ### Feature
 
-- Added airlock-micrograteway support (#413, @tyxeron)
+- Added airlock-micrograteway emitter support (#413, @tyxeron)
 
 ### Bugfix
 
